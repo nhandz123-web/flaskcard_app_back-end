@@ -34,8 +34,9 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/decks/{deck}',    [DeckController::class, 'show']);
     Route::put('/decks/{deck}',    [DeckController::class, 'update']);
     Route::delete('/decks/{deck}', [DeckController::class, 'destroy']);
-    Route::post('/cards/{card}/upload-image', [CardController::class, 'uploadImage']);
-    Route::post('/cards/{card}/audio', [CardController::class, 'uploadAudio']);
+    Route::post('/cards/{cardId}/upload-image', [CardController::class, 'uploadImage']);
+    Route::post('/cards/{cardId}/audio', [CardController::class, 'uploadAudio']);
+    Route::put('/decks/{deckId}/cards/{card}', [CardController::class, 'updateCardDetails']);
 
     // Cards theo deck
     Route::get('/decks/{deck}/cards',             [CardController::class, 'index']);

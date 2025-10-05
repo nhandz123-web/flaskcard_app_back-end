@@ -28,18 +28,21 @@ class CardController extends Controller
         $this->assertOwner($request, $deck);
 
         $data = Validator::make($request->all(), [
-            'front'     => ['required','string','max:255'],
-            'back'      => ['required','string'],
-            'phonetic'  => ['nullable','string','max:255'],
-            'example'   => ['nullable','string'],
-            'image_url' => ['nullable','url'],
-            'audio_url' => ['nullable','url'],
-            'extra'     => ['nullable','array'],
+            'front' => ['required', 'string', 'max:255'],
+            'back' => ['required', 'string'],
+            'phonetic' => ['nullable', 'string', 'max:255'],
+            'example' => ['nullable', 'string'],
+            'image_url' => ['nullable', 'url'],
+            'audio_url' => ['nullable', 'url'],
+            'extra' => ['nullable', 'array'],
         ])->validate();
 
         $card = $deck->cards()->create($data);
 
-        return response()->json(['status'=>'success','card'=>$card], 201, [], JSON_UNESCAPED_UNICODE);
+        // Tăng cards_count
+        $deck->increment('cards_count');
+
+        return response()->json(['status' => 'success', 'card' => $card], 201, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function show(Request $request, Deck $deck, Card $card)
@@ -55,17 +58,17 @@ class CardController extends Controller
         abort_unless($card->deck_id === $deck->id, 404);
 
         $data = Validator::make($request->all(), [
-            'front'     => ['sometimes','string','max:255'],
-            'back'      => ['sometimes','string'],
-            'phonetic'  => ['nullable','string','max:255'],
-            'example'   => ['nullable','string'],
-            'image_url' => ['nullable','url'],
-            'audio_url' => ['nullable','url'],
-            'extra'     => ['nullable','array'],
+            'front' => ['sometimes', 'string', 'max:255'],
+            'back' => ['sometimes', 'string'],
+            'phonetic' => ['nullable', 'string', 'max:255'],
+            'example' => ['nullable', 'string'],
+            'image_url' => ['nullable', 'url'],
+            'audio_url' => ['nullable', 'url'],
+            'extra' => ['nullable', 'array'],
         ])->validate();
 
         $card->update($data);
-        return response()->json(['status'=>'success','card'=>$card], 200, [], JSON_UNESCAPED_UNICODE);
+        return response()->json(['status' => 'success', 'card' => $card], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function destroy(Request $request, Deck $deck, Card $card)
@@ -74,25 +77,28 @@ class CardController extends Controller
         abort_unless($card->deck_id === $deck->id, 404);
 
         if ($card->image_url && Storage::exists(str_replace('/storage', 'public', $card->image_url))) {
-        Storage::delete(str_replace('/storage', 'public', $card->image_url));
+            Storage::delete(str_replace('/storage', 'public', $card->image_url));
         }
 
-        // Xóa file âm thanh nếu tồn tại
         if ($card->audio_url && Storage::exists(str_replace('/storage', 'public', $card->audio_url))) {
-        Storage::delete(str_replace('/storage', 'public', $card->audio_url));
+            Storage::delete(str_replace('/storage', 'public', $card->audio_url));
         }
 
         $card->delete();
-        return response()->json(['status'=>'success','message'=>'Đã xoá thẻ'], 200, [], JSON_UNESCAPED_UNICODE);
+
+        // Giảm cards_count
+        $deck->decrement('cards_count');
+
+        return response()->json(['status' => 'success', 'message' => 'Đã xoá thẻ'], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
-    public function uploadImage(Request $request, Card $card)
+    public function uploadImage(Request $request, int $cardId)
     {
-        // Policy: Gate::authorize('update', $card); // Nếu dùng policy
+        $card = Card::findOrFail($cardId);
+        $this->assertOwner($request, $card->deck); // Kiểm tra quyền
 
         $request->validate(['image' => 'required|image|mimes:jpeg,png|max:2048']);
 
-        // Xóa hình ảnh cũ nếu tồn tại
         if ($card->image_url) {
             Storage::disk('public')->delete(str_replace('storage/', '', $card->image_url));
         }
@@ -104,13 +110,13 @@ class CardController extends Controller
         return response()->json(['image_url' => $card->image_url], 200);
     }
 
-    public function uploadAudio(Request $request, Card $card)
+    public function uploadAudio(Request $request, int $cardId)
     {
-        $this->assertOwner($request, $card->deck); // Kiểm tra quyền qua deck
+        $card = Card::findOrFail($cardId);
+        $this->assertOwner($request, $card->deck);
 
-        // Validation
         $validator = Validator::make($request->all(), [
-            'file' => 'required|file|mimes:mp3,wav,ogg|max:10240', // Tối đa 10MB
+            'file' => 'required|file|mimes:mp3,wav,ogg|max:10240',
         ]);
 
         if ($validator->fails()) {
@@ -119,7 +125,6 @@ class CardController extends Controller
 
         $file = $request->file('file');
         if ($file) {
-            // Xóa audio cũ nếu tồn tại
             if ($card->audio_url) {
                 Storage::disk('public')->delete(str_replace('storage/', '', $card->audio_url));
             }
@@ -140,15 +145,12 @@ class CardController extends Controller
 
     public function updateCardDetails(Request $request, $deckId, Card $card)
     {
-        // Kiểm tra deck_id khớp với card
         if ($card->deck_id != $deckId) {
             return response()->json(['error' => 'Card does not belong to this deck'], 403);
         }
 
-        // Kiểm tra quyền
         $this->assertOwner($request, $card->deck);
 
-        // Validation
         $request->validate([
             'front' => 'required|string',
             'back' => 'required|string',
@@ -159,7 +161,6 @@ class CardController extends Controller
             'extra' => 'nullable|array',
         ]);
 
-        // Cập nhật card
         $card->update([
             'front' => $request->input('front'),
             'back' => $request->input('back'),
@@ -170,7 +171,6 @@ class CardController extends Controller
             'extra' => $request->input('extra', $card->extra),
         ]);
 
-        return response()->json(['message' => 'Card updated successfully'], 200);
+        return response()->json(['message' => 'Card updated successfully', 'card' => $card], 200);
     }
-
 }
