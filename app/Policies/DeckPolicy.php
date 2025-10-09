@@ -10,6 +10,11 @@ class DeckPolicy
 {
     use HandlesAuthorization;
 
+    public function view(User $user, Deck $deck)
+    {
+        return $user->id === $deck->user_id;
+    }
+
     public function update(User $user, Deck $deck)
     {
         return $user->id === $deck->user_id;

@@ -18,6 +18,11 @@ class Card extends Model
         return $this->belongsTo(Deck::class);
     }
 
+    public function progress()
+    {
+        return $this->hasMany(CardProgress::class);
+    }
+
     public function setImageUrlAttribute($value)
     {
         // Xóa hình ảnh cũ nếu có và giá trị mới là null

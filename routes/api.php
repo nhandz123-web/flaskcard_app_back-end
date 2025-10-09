@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CardController;
 use App\Http\Controllers\Api\DeckController;
+use App\Http\Controllers\Api\LearnController;
 
 /*
 |--------------------------------------------------------------------------
@@ -47,6 +48,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/cards/{card}/upload-image', [CardController::class, 'uploadImage']);
     Route::post('/cards/{card}/audio', [CardController::class, 'uploadAudio']);
     Route::put('/decks/{deckId}/cards/{card}', [CardController::class, 'updateCardDetails']);
+
+    Route::get('/decks/{deck}/learn', [App\Http\Controllers\Api\LearnController::class, 'getCardsToReview']);
+    Route::post('/decks/{deck}/cards/{card}/progress', [App\Http\Controllers\Api\LearnController::class, 'updateProgress']);
 });
 
 
