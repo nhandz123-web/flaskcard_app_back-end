@@ -51,6 +51,8 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/decks/{deck}/learn', [App\Http\Controllers\Api\LearnController::class, 'getCardsToReview']);
     Route::post('/decks/{deck}/cards/{card}/progress', [App\Http\Controllers\Api\LearnController::class, 'updateProgress']);
+    Route::post('/cards/{id}/review', [CardController::class, 'markCardReview']);
+    Route::get('/decks/{deckId}/learn', [CardController::class, 'getCardsToReview']);
 });
 
 

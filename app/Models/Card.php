@@ -8,7 +8,18 @@ use Illuminate\Support\Facades\Storage;
 class Card extends Model
 {
     protected $fillable = [
-        'deck_id', 'front', 'back', 'phonetic', 'example', 'image_url', 'audio_url', 'extra'
+        'deck_id',
+        'front',
+        'back',
+        'phonetic',
+        'example',
+        'image_url',
+        'audio_url',
+        'extra',
+        'easiness',
+        'repetition',
+        'interval',
+        'next_review_date',
     ];
 
     protected $casts = ['extra' => 'array'];

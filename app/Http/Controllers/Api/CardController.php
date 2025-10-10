@@ -173,4 +173,46 @@ class CardController extends Controller
 
         return response()->json(['message' => 'Card updated successfully', 'card' => $card], 200);
     }
+
+    public function markCardReview(Request $request, int $cardId)
+    {
+        $card = Card::findOrFail($cardId);
+        $this->assertOwner($request, $card->deck);
+
+        $validator = Validator::make($request->all(), [
+            'quality' => 'required|integer|min:0|max:5',
+            'easiness' => 'required|numeric|min:1.3',
+            'repetition' => 'required|integer|min:0',
+            'interval' => 'required|integer|min:1',
+            'next_review_date' => 'required|date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 422);
+        }
+
+        $card->update([
+            'easiness' => $request->easiness,
+            'repetition' => $request->repetition,
+            'interval' => $request->interval,
+            'next_review_date' => $request->next_review_date,
+        ]);
+
+        return response()->json(['status' => 'success'], 200);
+    }
+
+    public function getCardsToReview(Request $request, $deckId)
+    {
+        $deck = Deck::findOrFail($deckId);
+        $this->assertOwner($request, $deck);
+
+        $cards = Card::where('deck_id', $deckId)
+            ->where(function ($query) {
+                $query->whereNull('next_review_date')
+                    ->orWhere('next_review_date', '<=', now());
+            })
+            ->get();
+
+        return response()->json(['cards' => $cards], 200);
+    }
 }
