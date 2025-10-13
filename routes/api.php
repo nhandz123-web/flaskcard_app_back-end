@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CardController;
 use App\Http\Controllers\Api\DeckController;
 use App\Http\Controllers\Api\LearnController;
+use App\Http\Controllers\API\UserController;
+use BeyondCode\LaravelWebSockets\Http\Controllers\DashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,11 +21,13 @@ use App\Http\Controllers\Api\LearnController;
 */
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+
     return $request->user();
 });
 
-Route::post('/login',    [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login',    [AuthController::class, 'login']);
+
 
 Route::middleware('auth:api')->group(function () {
     Route::get('/me',     [AuthController::class, 'me']);
@@ -54,6 +58,11 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/cards/{id}/review', [CardController::class, 'markCardReview']);
     Route::get('/decks/{deckId}/learn', [CardController::class, 'getCardsToReview']);
 });
+
+Route::middleware('auth:api')->get('/user', [UserController::class, 'getProfile']);
+Route::get('/laravel-websockets', function () {
+    return view('laravel-websockets::dashboard');
+})->name('websockets.dashboard');
 
 
 

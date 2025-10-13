@@ -10,13 +10,12 @@ use App\Models\User;
 
 class AuthController extends Controller
 {
-    // POST /api/register
     public function register(Request $request)
     {
         $data = Validator::make($request->all(), [
-            'name'     => ['required','string','max:255'],
-            'email'    => ['required','email','max:255','unique:users,email'],
-            'password' => ['required','string','min:8'],
+            'name'     => ['required', 'string', 'max:255'],
+            'email'    => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8'],
         ])->validate();
 
         $user = User::create([
@@ -25,7 +24,6 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
         ]);
 
-        // ✅ LẤY CHUỖI TOKEN (Passport)
         $accessToken = $user->createToken('api-token')->accessToken;
 
         return response()->json([
@@ -33,16 +31,15 @@ class AuthController extends Controller
             'message'      => 'Đăng ký thành công',
             'token_type'   => 'Bearer',
             'access_token' => $accessToken,
-            'user'         => ['id'=>$user->id,'name'=>$user->name,'email'=>$user->email],
+            'user'         => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
         ], 201, [], JSON_UNESCAPED_UNICODE);
     }
 
-    // POST /api/login
     public function login(Request $request)
     {
         $data = Validator::make($request->all(), [
-            'email'    => ['required','email'],
-            'password' => ['required','string','min:8'],
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'string', 'min:8'],
         ])->validate();
 
         $user = User::where('email', $data['email'])->first();
@@ -54,7 +51,9 @@ class AuthController extends Controller
             ], 401, [], JSON_UNESCAPED_UNICODE);
         }
 
-        // ✅ LẤY CHUỖI TOKEN (Passport)
+        $user->last_login = now();
+        $user->save();
+
         $accessToken = $user->createToken('api-token')->accessToken;
 
         return response()->json([
@@ -62,20 +61,34 @@ class AuthController extends Controller
             'message'      => 'Đăng nhập thành công',
             'token_type'   => 'Bearer',
             'access_token' => $accessToken,
-            'user'         => ['id'=>$user->id,'name'=>$user->name,'email'=>$user->email],
+            'user'         => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
         ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
-    // GET /api/me  (cần Authorization: Bearer <token>)
     public function me(Request $request)
     {
-        return response()->json($request->user());
+        $user = $request->user();
+        $stats = $user->flashcardStats ? [
+            'flashcards_learned' => $user->flashcardStats->flashcards_learned,
+            'words_mastered' => $user->flashcardStats->words_mastered,
+        ] : [
+            'flashcards_learned' => 0,
+            'words_mastered' => 0,
+        ];
+
+        return response()->json([
+            'id' => $user->id, // Thêm id
+            'name' => $user->name,
+            'email' => $user->email,
+            'avatar' => $user->avatar ? asset('storage/' . $user->avatar) : null,
+            'created_at' => $user->created_at->format('d/m/Y'),
+            'last_login' => $user->last_login ? $user->last_login->format('d/m/Y h:i A') : null,
+            'stats' => $stats,
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
-    // POST /api/logout  (cần Authorization: Bearer <token>)
     public function logout(Request $request)
     {
-        // Hủy tất cả tokens của user (an toàn, đơn giản)
         $request->user()->tokens()->delete();
 
         return response()->json([

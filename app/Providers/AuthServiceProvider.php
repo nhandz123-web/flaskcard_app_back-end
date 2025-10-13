@@ -9,6 +9,7 @@ use App\Policies\CardPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
+
 class AuthServiceProvider extends ServiceProvider
 {
     protected $policies = [
@@ -19,5 +20,9 @@ class AuthServiceProvider extends ServiceProvider
     public function boot()
     {
         $this->registerPolicies();
+        Gate::define('viewWebSocketsDashboard', function ($user = null) {
+        return true; // Cho phép truy cập dashboard
+    });
     }
+    
 }
