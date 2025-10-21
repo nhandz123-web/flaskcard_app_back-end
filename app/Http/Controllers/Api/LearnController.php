@@ -1,5 +1,4 @@
-<?php
-
+<!-- 
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -9,6 +8,7 @@ use App\Models\Deck;
 use App\Models\Card;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class LearnController extends Controller
@@ -31,15 +31,16 @@ class LearnController extends Controller
 
             $this->authorize('view', $deck);
 
+            DB::statement("SET time_zone = '+00:00';");
             $cacheKey = 'cards_to_review_' . $deck->id . '_' . $request->user()->id;
-            $cards = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($deck, $request) {
+            $cards = Cache::remember($cacheKey, now()->addMinutes(2), function () use ($deck, $request) {
                 return Card::where('deck_id', $deck->id)
                     ->where(function ($query) use ($request) {
                         $query->whereDoesntHave('progress', function ($q) use ($request) {
                             $q->where('user_id', $request->user()->id);
                         })->orWhereHas('progress', function ($q) use ($request) {
                             $q->where('user_id', $request->user()->id)
-                                ->where('next_review_at', '<=', Carbon::now());
+                              ->where('next_review_at', '<=', Carbon::now());
                         });
                     })
                     ->with(['progress' => function ($query) use ($request) {
@@ -48,6 +49,13 @@ class LearnController extends Controller
                     ->take(20)
                     ->get();
             });
+
+            Log::debug('getCardsToReview response', [
+                'deck_id' => $deck->id,
+                'user_id' => $request->user()->id,
+                'now' => Carbon::now()->toDateTimeString(),
+                'cards' => $cards->toArray(),
+            ]);
 
             return response()->json([
                 'status' => 'success',
@@ -70,6 +78,7 @@ class LearnController extends Controller
     public function updateProgress(Request $request, Deck $deck, Card $card)
     {
         try {
+            DB::statement("SET time_zone = '+00:00';");
             $this->authorize('view', $deck);
             if ($card->deck_id != $deck->id) {
                 return response()->json([
@@ -77,13 +86,16 @@ class LearnController extends Controller
                     'message' => 'Card does not belong to this deck'
                 ], 403, [], JSON_UNESCAPED_UNICODE);
             }
+
             $data = $request->validate([
                 'quality' => 'required|integer|min:0|max:5'
             ]);
+
             $progress = CardProgress::firstOrCreate(
                 ['user_id' => $request->user()->id, 'card_id' => $card->id],
                 ['repetition' => 0, 'interval' => 1, 'ease_factor' => 2.5]
             );
+
             $progress->repetition += 1;
             $progress->ease_factor = max(1.3, $progress->ease_factor + (0.1 - (5 - $data['quality']) * 0.08));
             $progress->interval = $data['quality'] < 3 ? 1 : $this->calculateInterval($progress);
@@ -91,7 +103,26 @@ class LearnController extends Controller
             $progress->correct_count += $data['quality'] >= 3 ? 1 : 0;
             $progress->incorrect_count += $data['quality'] < 3 ? 1 : 0;
             $progress->save();
+
+            // Đồng bộ với cards.next_review_date
+            $card->update([
+                'easiness' => $progress->ease_factor,
+                'repetition' => $progress->repetition,
+                'interval' => $progress->interval,
+                'next_review_date' => $progress->next_review_at,
+            ]);
+
             Cache::forget('cards_to_review_' . $deck->id . '_' . $request->user()->id);
+            Cache::forget("cards_to_review_deck_{$deck->id}");
+
+            Log::debug('Progress updated', [
+                'card_id' => $card->id,
+                'deck_id' => $deck->id,
+                'user_id' => $request->user()->id,
+                'progress' => $progress->toArray(),
+                'card' => $card->toArray(),
+            ]);
+
             return response()->json([
                 'status' => 'success',
                 'progress' => $progress
@@ -117,4 +148,4 @@ class LearnController extends Controller
         if ($progress->repetition == 2) return 6;
         return (int)($progress->interval * $progress->ease_factor);
     }
-}
+} -->

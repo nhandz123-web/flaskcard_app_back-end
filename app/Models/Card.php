@@ -22,7 +22,9 @@ class Card extends Model
         'next_review_date',
     ];
 
-    protected $casts = ['extra' => 'array'];
+    protected $casts = [
+        'next_review_date' => 'datetime', 'extra' => 'array'
+    ];
 
     public function deck()
     {

@@ -9,25 +9,9 @@ use App\Http\Controllers\Api\LearnController;
 use App\Http\Controllers\API\UserController;
 use BeyondCode\LaravelWebSockets\Http\Controllers\DashboardController;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
-*/
-
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-
-    return $request->user();
-});
 
 Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login',    [AuthController::class, 'login']);
-
+Route::post('/login',    [AuthController::class, 'login']);
 
 Route::middleware('auth:api')->group(function () {
     Route::get('/me',     [AuthController::class, 'me']);
@@ -53,16 +37,22 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/cards/{card}/audio', [CardController::class, 'uploadAudio']);
     Route::put('/decks/{deckId}/cards/{card}', [CardController::class, 'updateCardDetails']);
 
-    Route::get('/decks/{deck}/learn', [App\Http\Controllers\Api\LearnController::class, 'getCardsToReview']);
-    Route::post('/decks/{deck}/cards/{card}/progress', [App\Http\Controllers\Api\LearnController::class, 'updateProgress']);
     Route::post('/cards/{id}/review', [CardController::class, 'markCardReview']);
     Route::get('/decks/{deckId}/learn', [CardController::class, 'getCardsToReview']);
+
+    Route::get('/profile', [UserController::class, 'getProfile']);
+    Route::post('/update-profile', [UserController::class, 'updateProfile']);
+    Route::put('/me', [UserController::class, 'updateProfile']);
+    
+    Route::post('/update-avatar', [UserController::class, 'updateAvatar']);
 });
 
-Route::middleware('auth:api')->get('/user', [UserController::class, 'getProfile']);
+
 Route::get('/laravel-websockets', function () {
     return view('laravel-websockets::dashboard');
 })->name('websockets.dashboard');
+
+
 
 
 

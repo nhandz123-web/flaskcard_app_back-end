@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\Deck;
 use App\Models\Card;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log; // Import Log facade
+use Carbon\Carbon; // Thêm import Carbon
 
 class CardController extends Controller
 {
@@ -176,43 +178,87 @@ class CardController extends Controller
 
     public function markCardReview(Request $request, int $cardId)
     {
-        $card = Card::findOrFail($cardId);
-        $this->assertOwner($request, $card->deck);
+        try {
+            $card = Card::findOrFail($cardId);
+            $this->assertOwner($request, $card->deck);
 
-        $validator = Validator::make($request->all(), [
-            'quality' => 'required|integer|min:0|max:5',
-            'easiness' => 'required|numeric|min:1.3',
-            'repetition' => 'required|integer|min:0',
-            'interval' => 'required|integer|min:1',
-            'next_review_date' => 'required|date',
-        ]);
+            // Log input từ request
+            Log::debug('markCardReview input', [
+                'card_id' => $cardId,
+                'request_data' => $request->all(),
+                'received_at' => now()->toDateTimeString(),
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['error' => $validator->errors()], 422);
+            $validator = Validator::make($request->all(), [
+                'quality' => 'required|integer|min:0|max:5',
+                'easiness' => 'required|numeric|min:1.3',
+                'repetition' => 'required|integer|min:0',
+                'interval' => 'required|integer|min:1',
+                'next_review_date' => 'required|date',
+            ]);
+
+            if ($validator->fails()) {
+                Log::error('Validation failed for markCardReview', [
+                    'card_id' => $cardId,
+                    'errors' => $validator->errors()->toArray(),
+                ]);
+                return response()->json(['error' => $validator->errors()], 422);
+            }
+
+            $nextReviewDate = Carbon::parse($request->next_review_date)->utc();
+            $card->update([
+                'easiness' => $request->easiness,
+                'repetition' => $request->repetition,
+                'interval' => $request->interval,
+                'next_review_date' => $nextReviewDate,
+            ]);
+
+            Log::debug('Card updated', [
+                'card_id' => $cardId,
+                'updated_data' => $card->toArray(),
+                'updated_at' => now()->toDateTimeString(),
+            ]);
+
+            return response()->json(['status' => 'success'], 200);
+        } catch (\Exception $e) {
+            Log::error('Error in markCardReview', [
+                'card_id' => $cardId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json(['error' => 'Server error'], 500);
         }
-
-        $card->update([
-            'easiness' => $request->easiness,
-            'repetition' => $request->repetition,
-            'interval' => $request->interval,
-            'next_review_date' => $request->next_review_date,
-        ]);
-
-        return response()->json(['status' => 'success'], 200);
     }
 
     public function getCardsToReview(Request $request, $deckId)
     {
-        $deck = Deck::findOrFail($deckId);
-        $this->assertOwner($request, $deck);
+        try {
+            $deck = Deck::findOrFail($deckId);
+            $this->assertOwner($request, $deck);
 
-        $cards = Card::where('deck_id', $deckId)
-            ->where(function ($query) {
-                $query->whereNull('next_review_date')
-                    ->orWhere('next_review_date', '<=', now());
-            })
-            ->get();
+            $now = now()->setTimezone('Asia/Ho_Chi_Minh'); // Sử dụng múi giờ +07:00
+            $cards = Card::where('deck_id', $deckId)
+                ->where(function ($query) use ($now) {
+                    $query->whereNull('next_review_date')
+                        ->orWhere('next_review_date', '<=', $now);
+                })
+                ->get();
 
-        return response()->json(['cards' => $cards], 200);
+            Log::debug('getCardsToReview response', [
+                'deck_id' => $deckId,
+                'now_local' => $now->toDateTimeString(),
+                'card_count' => $cards->count(),
+                'cards' => $cards->toArray(),
+            ]);
+
+            return response()->json(['cards' => $cards], 200);
+        } catch (\Exception $e) {
+            Log::error('Error in getCardsToReview', [
+                'deck_id' => $deckId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json(['error' => 'Server error'], 500);
+        }
     }
 }

@@ -1,5 +1,4 @@
-<?php
-
+<!-- 
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -43,4 +42,4 @@ class StudyController extends Controller
             'summary' => $session,
         ], 200, [], JSON_UNESCAPED_UNICODE);
     }
-}
+} -->
