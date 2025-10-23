@@ -15,7 +15,7 @@ Route::post('/login',    [AuthController::class, 'login']);
 
 Route::middleware('auth:api')->group(function () {
     Route::get('/me',     [AuthController::class, 'me']);
-    Route::post('/logout',[AuthController::class, 'logout']);
+    Route::post('/logout', [AuthController::class, 'logout']);
 
     // Decks (chỉ thấy/đụng data của chính mình)
     Route::get('/decks',           [DeckController::class, 'index']);
@@ -43,17 +43,17 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/profile', [UserController::class, 'getProfile']);
     Route::post('/update-profile', [UserController::class, 'updateProfile']);
     Route::put('/me', [UserController::class, 'updateProfile']);
-    
+
     Route::post('/update-avatar', [UserController::class, 'updateAvatar']);
+
+    // Thêm vào nhóm middleware auth:api
+    Route::get('/cards/{cardId}/ai-prediction', [CardController::class, 'getAIPrediction']);
+    Route::get('/decks/{deckId}/ai-predictions', [CardController::class, 'getDeckAIPredictions']);
+    Route::post('/cards/{cardId}/review-ai', [CardController::class, 'markCardReviewWithAI']);
+    Route::post('/cards/{cardId}/review', [CardController::class, 'reviewCard']);
 });
 
 
 Route::get('/laravel-websockets', function () {
     return view('laravel-websockets::dashboard');
 })->name('websockets.dashboard');
-
-
-
-
-
-

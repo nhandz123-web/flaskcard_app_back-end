@@ -10,6 +10,8 @@ use App\Models\Card;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log; // Import Log facade
 use Carbon\Carbon; // Thêm import Carbon
+use App\Services\ForgettingCurveService;
+use App\Models\CardProgress;
 
 class CardController extends Controller
 {
@@ -182,7 +184,6 @@ class CardController extends Controller
             $card = Card::findOrFail($cardId);
             $this->assertOwner($request, $card->deck);
 
-            // Log input từ request
             Log::debug('markCardReview input', [
                 'card_id' => $cardId,
                 'request_data' => $request->all(),
@@ -206,6 +207,18 @@ class CardController extends Controller
             }
 
             $nextReviewDate = Carbon::parse($request->next_review_date)->utc();
+
+            // Lưu vào card_progress để theo dõi lịch sử
+            CardProgress::create([
+                'card_id' => $cardId,
+                'user_id' => $request->user()->id,
+                'quality' => $request->quality,
+                'easiness' => $request->easiness,
+                'repetition' => $request->repetition,
+                'interval' => $request->interval,
+                'reviewed_at' => now(),
+            ]);
+
             $card->update([
                 'easiness' => $request->easiness,
                 'repetition' => $request->repetition,
@@ -226,6 +239,7 @@ class CardController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return response()->json(['error' => 'Server error'], 500);
         }
     }
@@ -258,6 +272,174 @@ class CardController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+            return response()->json(['error' => 'Server error'], 500);
+        }
+    }
+
+    private ForgettingCurveService $forgettingCurveService;
+
+    public function __construct(ForgettingCurveService $forgettingCurveService)
+    {
+        $this->forgettingCurveService = $forgettingCurveService;
+    }
+
+    /**
+     * Lấy dự đoán AI cho một thẻ
+     */
+    public function getAIPrediction(Request $request, int $cardId)
+    {
+        $card = Card::findOrFail($cardId);
+        $this->assertOwner($request, $card->deck);
+
+        // Lấy lịch sử ôn tập (nếu có bảng card_progress)
+        $reviewHistory = $card->progress()
+            ->orderBy('reviewed_at', 'desc')
+            ->limit(10)
+            ->get(['quality', 'reviewed_at'])
+            ->map(fn($p) => [
+                'quality' => $p->quality,
+                'reviewed_at' => $p->reviewed_at->format('Y-m-d H:i')
+            ])
+            ->toArray();
+
+        $prediction = $this->forgettingCurveService->predictForgettingProbability(
+            $card,
+            $reviewHistory
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'card_id' => $cardId,
+            'prediction' => $prediction
+        ], 200);
+    }
+
+    /**
+     * Lấy dự đoán cho nhiều thẻ trong deck
+     */
+    public function getDeckAIPredictions(Request $request, int $deckId)
+    {
+        $deck = Deck::findOrFail($deckId);
+        $this->assertOwner($request, $deck);
+
+        $cardIds = $deck->cards()->pluck('id')->toArray();
+
+        $predictions = $this->forgettingCurveService->getBatchPredictions(
+            $cardIds,
+            $request->user()->id
+        );
+
+        // Tính thống kê tổng hợp
+        $stats = [
+            'total_cards' => count($predictions),
+            'high_risk_cards' => collect($predictions)->filter(fn($p) => $p['forgetting_probability'] > 70)->count(),
+            'medium_risk_cards' => collect($predictions)->filter(fn($p) => $p['forgetting_probability'] >= 40 && $p['forgetting_probability'] <= 70)->count(),
+            'low_risk_cards' => collect($predictions)->filter(fn($p) => $p['forgetting_probability'] < 40)->count(),
+            'average_forgetting_probability' => round(collect($predictions)->avg('forgetting_probability'), 1),
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'deck_id' => $deckId,
+            'predictions' => $predictions,
+            'statistics' => $stats
+        ], 200);
+    }
+
+    /**
+     * Cải tiến thuật toán review với AI
+     */
+    public function markCardReviewWithAI(Request $request, int $cardId)
+    {
+        try {
+            $card = Card::findOrFail($cardId);
+            $this->assertOwner($request, $card->deck);
+
+            $validator = Validator::make($request->all(), [
+                'quality' => 'required|integer|min:0|max:5',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['error' => $validator->errors()], 422);
+            }
+
+            // Lấy dự đoán AI
+            $reviewHistory = $card->progress()
+                ->orderBy('reviewed_at', 'desc')
+                ->limit(10)
+                ->get(['quality', 'reviewed_at'])
+                ->toArray();
+
+            $aiPrediction = $this->forgettingCurveService->predictForgettingProbability(
+                $card,
+                $reviewHistory
+            );
+
+            // Kết hợp SM-2 với AI prediction
+            $quality = $request->input('quality');
+            $easiness = $card->easiness ?? 2.5;
+            $repetition = $card->repetition ?? 0;
+
+            // Tính toán easiness theo SM-2
+            $easiness = $easiness + (0.1 - (5 - $quality) * (0.08 + (5 - $quality) * 0.02));
+            $easiness = max(1.3, min(2.5, $easiness));
+
+            // Xác định interval dựa trên quality
+            $baseInterval = match ($quality) {
+                0 => 1 / 1440, // Học lại: 1 phút (1/1440 ngày)
+                1 => 5 / 1440, // Khó: 5 phút (5/1440 ngày)
+                2 => 5 / 1440, // Khó: 5 phút (5/1440 ngày)
+                3 => 6 / 24,   // Bình thường: 6 giờ (6/24 ngày)
+                4 => 1,        // Dễ: 1 ngày
+                5 => 1,        // Dễ: 1 ngày
+                default => 1   // Mặc định: 1 ngày
+            };
+
+            // Kết hợp với AI recommendation
+            $aiInterval = $aiPrediction['recommended_interval'];
+            $finalInterval = (int)(($baseInterval * 0.7) + ($aiInterval * 0.3)); // 70% SM-2, 30% AI
+            $finalInterval = max(1 / 1440, min(180, $finalInterval)); // Giới hạn từ 1 phút đến 180 ngày
+
+            // Tính toán next_review_date dựa trên finalInterval
+            $nextReviewDate = now()->addMinutes($finalInterval * 1440); // Chuyển đổi ngày sang phút
+
+            if ($quality >= 3) {
+                $repetition += 1;
+            } else {
+                $repetition = max(0, $repetition - 1);
+            }
+
+            $card->update([
+                'easiness' => $easiness,
+                'repetition' => $repetition,
+                'interval' => $finalInterval,
+                'next_review_date' => $nextReviewDate,
+            ]);
+
+            Log::debug('Card reviewed with AI', [
+                'card_id' => $cardId,
+                'quality' => $quality,
+                'sm2_interval' => $baseInterval,
+                'ai_interval' => $aiInterval,
+                'final_interval' => $finalInterval,
+                'ai_forgetting_prob' => $aiPrediction['forgetting_probability']
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'card' => $card,
+                'ai_insights' => [
+                    'forgetting_probability' => $aiPrediction['forgetting_probability'],
+                    'difficulty' => $aiPrediction['difficulty'],
+                    'reasoning' => $aiPrediction['reasoning']
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error in markCardReviewWithAI', [
+                'card_id' => $cardId,
+                'error' => $e->getMessage(),
+            ]);
+
             return response()->json(['error' => 'Server error'], 500);
         }
     }

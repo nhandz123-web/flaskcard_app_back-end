@@ -1,29 +1,39 @@
 <?php
+
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CardProgress extends Model
 {
-    protected $table = 'card_progresses';
+    protected $table = 'card_progress';
+    
     protected $fillable = [
-        'user_id', 'card_id', 'repetition', 'interval', 'ease_factor', 'next_review_at', 'correct_count', 'incorrect_count',
+        'card_id',
+        'user_id',
+        'quality',
+        'easiness',
+        'repetition',
+        'interval',
+        'reviewed_at',
     ];
+
     protected $casts = [
-        'next_review_at' => 'datetime',
-        'ease_factor' => 'float',
+        'reviewed_at' => 'datetime',
+        'easiness' => 'double',
+        'quality' => 'integer',
         'repetition' => 'integer',
         'interval' => 'integer',
-        'correct_count' => 'integer',
-        'incorrect_count' => 'integer',
     ];
 
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    public function card()
+    public function card(): BelongsTo
     {
         return $this->belongsTo(Card::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }
